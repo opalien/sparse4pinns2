@@ -1,9 +1,13 @@
 import torch
 from torch import Tensor
+from core.models.pinn import PINN
 
 from collections.abc import Callable
 
 from ..solvers.solver import Solver
+
+import os
+import pickle
 
 
 
@@ -188,10 +192,7 @@ class BurgerSolver(Solver):
 
         interp_results = (1.0 - alpha_t) * U_t0_interp_x + alpha_t * U_t1_interp_x
         
-        if a.dim() == 1:
-            return interp_results.squeeze(0)
-        else:
-            return interp_results
+        return interp_results
 
 
     def norm_operator(self):
@@ -226,15 +227,38 @@ class BurgerSolver(Solver):
 
 
 
+def burger_pde(this: PINN, u_pred: Tensor, a_in: Tensor, idx: int | None = None) -> Tensor:
+    
+    J = this.J()
+    H = this.H()
+
+    #print(f"{J.shape=}, {H.shape=}")
+    #print(f"{J[:5]=}, {H[:5]=}")
+
+    du_dt = J[idx:, 0, 0]
+    du_dx = J[idx:, 0, 1]
+    du_dxx = H[idx:, 0, 1, 1]
+    u = this.u_pred[idx:, 0]
 
 
-if __name__ == "__main__":
-    import pickle
+    return du_dt + u*du_dx - (0.01/torch.pi)*du_dxx
 
-    solver = BurgerSolver(nT=10_000, nX=1000)
 
+
+
+
+
+def main(nT: int = 10_000, nX: int = 1000):
+    solver = BurgerSolver(nT=nT, nX=nX)
     solver.solve(newton_iters=5, newton_tol=1e-6)
-    
-    pickle.dump(solver, open("burger_solver.pkl", "wb"))
-    print("Solver completed and saved to 'burger_solver.pkl'.")
-    
+
+    outpath = os.path.join(os.path.dirname(__file__), "burger_solver.pkl")
+    os.makedirs(os.path.dirname(outpath), exist_ok=True)
+    with open(outpath, "wb") as f:
+        pickle.dump(solver, f)
+    print(f"Solver completed and saved to '{outpath}'.")
+
+
+
+# USAGE :
+# python -c "from examples.any.solvers.burger import main; main()"

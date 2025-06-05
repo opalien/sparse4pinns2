@@ -84,6 +84,9 @@ class PINN(nn.Module):
                 return torch.tensor(0.0, device=self.u_pred.device)
 
             case _:
+                #if idx == 100:
+                #    print(f"Data loss idx: {idx=}, {self.u_pred[:5]=}, {u[:5]=}")
+
                 return torch.nn.functional.mse_loss(
                     self.u_pred[:idx], u[:idx]
                 )
@@ -104,7 +107,7 @@ class PINN(nn.Module):
                 return torch.tensor(0.0, device=self.a_in.device)
             
             case _:
-                residue = self.pde(self.u_pred[idx:], self.a_in[idx:])
+                residue = self.pde(self.u_pred[idx:], self.a_in[idx:], idx=idx)
                 if residue.numel() == 0:
                     return torch.tensor(0.0, device=self.u_pred.device, requires_grad=True)
                 return torch.nn.functional.mse_loss(residue, torch.zeros_like(residue, device=self.u_pred.device))
@@ -118,6 +121,9 @@ class PINN(nn.Module):
         self.data_loss_v = data_loss
         self.pde_loss_v = pde_loss
         self.loss_v = loss
+
+        #if idx == 100:
+        #    print(f"{idx=}, {data_loss=}, {pde_loss=}, {loss=}")
 
         return loss
     
@@ -139,20 +145,45 @@ class PINN(nn.Module):
 
 
     def H(self):
+        if self.u_pred is None or self.a_in is None:
+            raise RuntimeError("Call forward() before computing Hessian. Ensure model has been called with input.")
+        
+        if self.a_in.ndim != 2:
+            raise ValueError(f"self.a_in is expected to be 2D (batch_size, input_dim). Got {self.a_in.ndim}D.")
 
-        J = self.J()
-        H = [
-            torch.autograd.grad(
-                outputs=J[:, i],
-                inputs=self.a_in,
-                grad_outputs=torch.ones_like(J[:, i], device=J.device),
-                retain_graph=True,
-                create_graph=True,
-                allow_unused=True
-            )[0]
-            for i in range(J.size(1))
-        ]
-        self.H_v = torch.stack(H, dim=1)
+        batch_size = self.a_in.size(0)
+        output_dim = self.u_pred.size(1)
+        input_dim = self.a_in.size(1)
+
+        J = self.J() 
+
+        hessians_for_each_output_component = []
+        for o_idx in range(output_dim):
+            rows_of_H_o_matrix = []
+            for i_idx in range(input_dim):
+                J_o_i_component = J[:, o_idx, i_idx]
+                
+                grad_output_row = torch.autograd.grad(
+                    outputs=J_o_i_component,
+                    inputs=self.a_in,
+                    grad_outputs=torch.ones_like(J_o_i_component, device=self.u_pred.device),
+                    retain_graph=True, 
+                    create_graph=True,
+                    allow_unused=True 
+                )[0]
+                
+                if grad_output_row is None:
+                    grad_output_row = torch.zeros(batch_size, input_dim, 
+                                                  device=self.a_in.device, dtype=self.a_in.dtype)
+                
+                rows_of_H_o_matrix.append(grad_output_row)
+
+            H_o_matrix = torch.stack(rows_of_H_o_matrix, dim=1) 
+            hessians_for_each_output_component.append(H_o_matrix)
+            
+        H_final = torch.stack(hessians_for_each_output_component, dim=1) 
+
+        self.H_v = H_final
         return self.H_v
 
 

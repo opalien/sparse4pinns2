@@ -217,10 +217,7 @@ class NavierStokesSolver(Solver):
         
         interp_results = (1.0 - alpha_t) * S_t0_interp_xy + alpha_t * S_t1_interp_xy
         
-        if is_single_point:
-            return interp_results.squeeze(0)
-        else:
-            return interp_results
+        return interp_results
 
     def visualize(self, time_point_idx=-1, time_slices_to_plot=None):
         import matplotlib.pyplot as plt

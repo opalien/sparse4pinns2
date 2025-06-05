@@ -18,13 +18,15 @@ def accuracy(model: Module, test_loader: PINNDataloader, device: torch.device) -
     num_batches: int = 0
     with torch.no_grad():
         for i, (a, u, idx) in enumerate(test_loader): # type: ignore
+
+            #print(f"{a[:5]=}, {u[:5]=}, {idx=}") # Debugging line to check data
             
             a: Tensor = a.float().to(device)
             u: Tensor = u.float().to(device)
     
 
             model(a)
-            MSE = model.loss(u)
+            MSE = model.loss(u, idx)
 
             total_MSE += MSE.item()
             num_batches += 1

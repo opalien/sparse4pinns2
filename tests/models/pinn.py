@@ -92,7 +92,7 @@ class TestSimpleDataset(SimpleDataset):
 
         self.set_elements(elements)
 
-        
+
 
 
 if __name__ == "__main__":

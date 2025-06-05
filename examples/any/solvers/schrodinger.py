@@ -2,6 +2,7 @@ import torch
 from torch import Tensor
 import numpy # For visualization, pi, and other math constants
 import matplotlib.pyplot as plt
+from core.models.pinn import PINN
 
 
 from .solver import Solver
@@ -229,10 +230,9 @@ class SchrodingerSolver(Solver):
             
             interp_results_uv[:, part_idx] = (1.0 - alpha_t) * U_t0_interp_x + alpha_t * U_t1_interp_x
         
-        if is_single_point:
-            return interp_results_uv.squeeze(0)
-        else:
-            return interp_results_uv
+        interp_results_uv = interp_results_uv.squeeze(0)
+        #print(f"{interp_results_uv=}")
+        return interp_results_uv
 
     def norm_operator(self):
         if self.nT <= 1 or self.nX == 0: # Added nX == 0 check
@@ -344,12 +344,52 @@ class SchrodingerSolver(Solver):
             else:
                 plt.close() # Close figure if no plots were made
 
-if __name__ == "__main__":
-    import pickle
 
-    solver = SchrodingerSolver(nT=1000, nX=1000)
 
-    solver.solve(newton_iters=5, newton_tol=1e-6) 
+
+
+def schrodinger_pde(this: PINN, u_pred_arg: Tensor, a_in_arg: Tensor, idx: int | None = None) -> Tensor:
+
+    if idx is None:
+        raise ValueError("idx cannot be None when schrodinger_pde is called for computation.")
+
+    J_full = this.J() 
+    H_full = this.H() 
+
+
+    u_val_colloc = this.u_pred[idx:, 0]
+    v_val_colloc = this.u_pred[idx:, 1]
+
+
+    u_t_colloc = J_full[idx:, 0, 0]   
+    u_xx_colloc = H_full[idx:, 0, 1, 1] 
+
+    v_t_colloc = J_full[idx:, 1, 0]   
+    v_xx_colloc = H_full[idx:, 1, 1, 1] 
+
+    h_mod_sq_colloc = u_val_colloc**2 + v_val_colloc**2
+
+    # Imaginary part of PDE: u_t + 0.5*v_xx + |h|^2*v = 0
+    pde_imag_residual = u_t_colloc + 0.5 * v_xx_colloc + h_mod_sq_colloc * v_val_colloc
     
-    pickle.dump(solver, open("schrodinger_solver.pkl", "wb"))
+    # Real part of PDE: v_t - 0.5*u_xx - |h|^2*u = 0
+    pde_real_residual = v_t_colloc - 0.5 * u_xx_colloc - h_mod_sq_colloc * u_val_colloc
+
+    residuals = torch.stack([pde_imag_residual, pde_real_residual], dim=1)
+    
+    return residuals
+
+def main():
+    import pickle
+    import os
+
+    solver = SchrodingerSolver(nT=1000, nX=500)
+    solver.solve(newton_iters=5, newton_tol=1e-6) 
+
+    outpath = os.path.join(os.path.dirname(__file__), "schrodinger_solver.pkl")
+    os.makedirs(os.path.dirname(outpath), exist_ok=True)
+    with open(outpath, "wb") as f:
+        pickle.dump(solver, f)
+    print(f"Solver completed and saved to '{outpath}'.")
+    
     print("Solver completed and saved to 'schrodinger_solver.pkl'.")
