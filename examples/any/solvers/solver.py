@@ -14,3 +14,5 @@ class Solver(abc.ABC):
     def func(self, a: Tensor) -> Tensor:
         raise NotImplementedError
 
+
+
