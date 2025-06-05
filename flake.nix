@@ -36,6 +36,7 @@
       utils 
       matplotlib 
       fenics 
+      tqdm
     ]);
 
 
