@@ -347,7 +347,7 @@ class SchrodingerSolver(Solver):
 if __name__ == "__main__":
     import pickle
 
-    solver = SchrodingerSolver(nT=10_000, nX=1000)
+    solver = SchrodingerSolver(nT=1000, nX=1000)
 
     solver.solve(newton_iters=5, newton_tol=1e-6) 
     
