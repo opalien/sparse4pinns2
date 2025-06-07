@@ -9,7 +9,7 @@ __pycache__/
 *.jsonl
 *.idea
 project.txt
-converter.py
+
 experiments/any/params
 *.png
 *.jpg
