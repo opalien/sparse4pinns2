@@ -33,7 +33,7 @@ n = 16 #args.m_matrix**2
 k = 5 # args.k_layers
 epoch = 10000 #args.epoch
 lr = 0.001
-problem = "schrodinger"#"burger" #args.problem
+problem = "navier_stokes"#"schrodinger"#"burger" #args.problem
 
 
 def visualize_burger(model: AnyPINN):

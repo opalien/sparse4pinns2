@@ -2,8 +2,25 @@ import torch
 from torch import Tensor
 import numpy as np
 import abc
+from core.models.pinn import PINN
 
 from ..solvers.solver import Solver
+
+def _default_w0_initial_fn(x_grid: Tensor, y_grid: Tensor) -> Tensor:
+    """
+    Default initial vorticity w0(x,y).
+    """
+    return (
+        torch.sin(2 * torch.pi * x_grid) * torch.cos(2 * torch.pi * y_grid)
+        + 0.5 * torch.sin(4 * torch.pi * x_grid) * torch.cos(4 * torch.pi * y_grid)
+    ) * 0.5
+
+def _default_f_forcing_fn(x_grid: Tensor, y_grid: Tensor) -> Tensor:
+    """
+    Default forcing term f(x,y).
+    """
+    return 0.1 * (torch.sin(4 * torch.pi * x_grid) + torch.cos(4 * torch.pi * y_grid))
+
 
 class NavierStokesSolver(Solver):
 
@@ -32,13 +49,11 @@ class NavierStokesSolver(Solver):
 
         self.X_grid, self.Y_grid = torch.meshgrid(self.x, self.y, indexing='ij')
 
+        # La solution ne stocke que la vorticité `w`. La fonction de courant `psi` sera calculée à la volée.
         self.solution = torch.zeros((self.nT, self.nX, self.nY), device=self.device, dtype=torch.float64)
 
         if w0_initial_fn is None:
-            self.w0_initial_fn = lambda x_grid, y_grid: (
-                torch.sin(2 * torch.pi * x_grid) * torch.cos(2 * torch.pi * y_grid) +
-                0.5 * torch.sin(4 * torch.pi * x_grid) * torch.cos(4 * torch.pi * y_grid)
-            ) * 0.5
+            self.w0_initial_fn = _default_w0_initial_fn
         else:
             self.w0_initial_fn = w0_initial_fn
         
@@ -46,9 +61,7 @@ class NavierStokesSolver(Solver):
             self.solution[0] = self.w0_initial_fn(self.X_grid, self.Y_grid)
 
         if f_forcing_fn is None:
-            self.f_forcing_fn = lambda x_grid, y_grid: 0.1 * (
-                torch.sin(4 * torch.pi * x_grid) + torch.cos(4 * torch.pi * y_grid)
-            )
+            self.f_forcing_fn = _default_f_forcing_fn
         else:
             self.f_forcing_fn = f_forcing_fn
 
@@ -73,7 +86,7 @@ class NavierStokesSolver(Solver):
         if self.nX > 0 and self.nY > 0 :
             max_kx_abs = torch.max(torch.abs(self.Kx)) if self.nX > 0 else 0
             max_ky_abs = torch.max(torch.abs(self.Ky)) if self.nY > 0 else 0
-            if max_kx_abs > 0 : # Check to prevent division by zero if max_kx_abs is 0 (e.g. nX=1)
+            if max_kx_abs > 0 :
                  self.dealias_mask[torch.abs(self.Kx) > (2.0/3.0) * max_kx_abs] = 0
             if max_ky_abs > 0 :
                  self.dealias_mask[torch.abs(self.Ky) > (2.0/3.0) * max_ky_abs] = 0
@@ -119,10 +132,6 @@ class NavierStokesSolver(Solver):
         for n in range(self.nT - 1):
             if n % 10 == 0:
                 print(f"Solving time step {n}/{self.nT}")
-            if n > 0 :
-                pass
-            else: 
-                pass
             
             if n == 0: 
                 rhs_advection_forced = -dt * N_hat_n + dt * self.f_forcing_hat
@@ -141,6 +150,18 @@ class NavierStokesSolver(Solver):
             if n < self.nT - 2: 
                  N_hat_n = self._compute_nonlinear_term_hat(w_hat_n)
 
+    def _get_psi_from_w(self, w_grid: Tensor) -> Tensor:
+        """Calcule la fonction de courant psi à partir de la vorticité w sur la grille."""
+        if self.nX == 0 or self.nY == 0:
+            return torch.zeros_like(w_grid)
+        
+        w_hat = torch.fft.fft2(w_grid)
+        psi_hat = -w_hat / self.K_sq_no_zero
+        # Le mode (0,0) correspond à la moyenne de psi, que l'on peut fixer à 0.
+        psi_hat[..., 0, 0] = 0.0
+        
+        psi_grid = torch.fft.ifft2(psi_hat).real
+        return psi_grid
 
     def func(self, a: Tensor) -> Tensor:
         if not isinstance(a, Tensor):
@@ -158,7 +179,8 @@ class NavierStokesSolver(Solver):
             a_proc = a
         else:
             raise ValueError("'a' must be a 1D or 2D tensor with coordinate triplets.")
-
+        
+        num_points = a_proc.shape[0]
         a_proc = a_proc.to(self.device)
         t_coords = a_proc[:, 0]
         x_coords_orig = a_proc[:, 1]
@@ -167,10 +189,9 @@ class NavierStokesSolver(Solver):
         x_coords = x_coords_orig % 1.0
         y_coords = y_coords_orig % 1.0
         
-        grid_t = self.t
-        grid_x = self.x
-        grid_y = self.y
+        grid_t, grid_x, grid_y = self.t, self.x, self.y
 
+        # Indices et coefficients pour l'interpolation temporelle
         idx_t_right = torch.searchsorted(grid_t, t_coords, right=True)
         idx_t0 = (idx_t_right - 1).clamp(min=0, max=self.nT - 1)
         idx_t1 = idx_t_right.clamp(min=0, max=self.nT - 1)
@@ -181,43 +202,66 @@ class NavierStokesSolver(Solver):
         alpha_t = torch.zeros_like(t_coords, device=self.device, dtype=torch.float64)
         dt_nonzero_mask = dt_ax != 0
         alpha_t[dt_nonzero_mask] = (t_coords[dt_nonzero_mask] - t0_vals[dt_nonzero_mask]) / dt_ax[dt_nonzero_mask]
-        alpha_t = alpha_t.clamp(0.0, 1.0)
+        alpha_t = alpha_t.clamp(0.0, 1.0).unsqueeze(-1) # Pour le broadcasting (B, 1)
 
+        # Indices et coefficients pour l'interpolation spatiale
         idx_x0 = torch.floor(x_coords / self.dx).long().clamp(min=0, max=max(0,self.nX - 1)) if self.dx > 0 else torch.zeros_like(x_coords, dtype=torch.long)
         idx_x1_periodic = (idx_x0 + 1) % self.nX if self.nX > 0 else idx_x0
-        alpha_x = (x_coords - grid_x[idx_x0]) / self.dx if self.dx > 0 and self.nX > 0 else torch.zeros_like(x_coords, device=self.device, dtype=torch.float64)
-        alpha_x = alpha_x.clamp(0.0, 1.0)
+        alpha_x = ((x_coords - grid_x[idx_x0]) / self.dx if self.dx > 0 and self.nX > 0 else torch.zeros_like(x_coords, device=self.device, dtype=torch.float64)).clamp(0.0, 1.0)
 
         idx_y0 = torch.floor(y_coords / self.dy).long().clamp(min=0, max=max(0,self.nY - 1)) if self.dy > 0 else torch.zeros_like(y_coords, dtype=torch.long)
         idx_y1_periodic = (idx_y0 + 1) % self.nY if self.nY > 0 else idx_y0
-        alpha_y = (y_coords - grid_y[idx_y0]) / self.dy if self.dy > 0 and self.nY > 0 else torch.zeros_like(y_coords, device=self.device, dtype=torch.float64)
-        alpha_y = alpha_y.clamp(0.0, 1.0)
+        alpha_y = ((y_coords - grid_y[idx_y0]) / self.dy if self.dy > 0 and self.nY > 0 else torch.zeros_like(y_coords, device=self.device, dtype=torch.float64)).clamp(0.0, 1.0)
         
-        if self.nX == 0 or self.nY == 0: # Handle empty solution grid case
-            return torch.zeros(a_proc.shape[0], device=self.device, dtype=torch.float64)
+        # Cas où la grille est vide
+        if self.nX == 0 or self.nY == 0:
+            return torch.zeros((num_points, 2), device=self.device, dtype=torch.float64)
 
+        # Extraction des grilles de vorticité aux temps t0 et t1
+        w_grid_t0 = self.solution[idx_t0]
+        w_grid_t1 = self.solution[idx_t1]
 
-        S_t0x0y0 = self.solution[idx_t0, idx_x0, idx_y0]
-        S_t0x1y0 = self.solution[idx_t0, idx_x1_periodic, idx_y0]
-        S_t0x0y1 = self.solution[idx_t0, idx_x0, idx_y1_periodic]
-        S_t0x1y1 = self.solution[idx_t0, idx_x1_periodic, idx_y1_periodic]
-
-        S_t1x0y0 = self.solution[idx_t1, idx_x0, idx_y0]
-        S_t1x1y0 = self.solution[idx_t1, idx_x1_periodic, idx_y0]
-        S_t1x0y1 = self.solution[idx_t1, idx_x0, idx_y1_periodic]
-        S_t1x1y1 = self.solution[idx_t1, idx_x1_periodic, idx_y1_periodic]
-
-        S_t0x0_interp_y = (1.0 - alpha_y) * S_t0x0y0 + alpha_y * S_t0x0y1
-        S_t0x1_interp_y = (1.0 - alpha_y) * S_t0x1y0 + alpha_y * S_t0x1y1
-        S_t1x0_interp_y = (1.0 - alpha_y) * S_t1x0y0 + alpha_y * S_t1x0y1
-        S_t1x1_interp_y = (1.0 - alpha_y) * S_t1x1y0 + alpha_y * S_t1x1y1
-
-        S_t0_interp_xy = (1.0 - alpha_x) * S_t0x0_interp_y + alpha_x * S_t0x1_interp_y
-        S_t1_interp_xy = (1.0 - alpha_x) * S_t1x0_interp_y + alpha_x * S_t1x1_interp_y
+        # Calcul des grilles de fonction de courant correspondantes
+        psi_grid_t0 = self._get_psi_from_w(w_grid_t0)
+        psi_grid_t1 = self._get_psi_from_w(w_grid_t1)
         
-        interp_results = (1.0 - alpha_t) * S_t0_interp_xy + alpha_t * S_t1_interp_xy
+        # Fonction d'interpolation pour un champ donné (w ou psi)
+        def _interpolate_field(field_grid_t0, field_grid_t1):
+            # Indexation pour récupérer les valeurs aux 8 coins du cube d'interpolation pour chaque point du batch
+            batch_indices = torch.arange(num_points, device=self.device)
+            
+            f_t0x0y0 = field_grid_t0[batch_indices, idx_x0, idx_y0]
+            f_t0x1y0 = field_grid_t0[batch_indices, idx_x1_periodic, idx_y0]
+            f_t0x0y1 = field_grid_t0[batch_indices, idx_x0, idx_y1_periodic]
+            f_t0x1y1 = field_grid_t0[batch_indices, idx_x1_periodic, idx_y1_periodic]
+
+            f_t1x0y0 = field_grid_t1[batch_indices, idx_x0, idx_y0]
+            f_t1x1y0 = field_grid_t1[batch_indices, idx_x1_periodic, idx_y0]
+            f_t1x0y1 = field_grid_t1[batch_indices, idx_x0, idx_y1_periodic]
+            f_t1x1y1 = field_grid_t1[batch_indices, idx_x1_periodic, idx_y1_periodic]
+
+            # Interpolation bilinéaire sur le plan xy au temps t0
+            f_t0_interp_y0 = (1.0 - alpha_x) * f_t0x0y0 + alpha_x * f_t0x1y0
+            f_t0_interp_y1 = (1.0 - alpha_x) * f_t0x0y1 + alpha_x * f_t0x1y1
+            f_t0_interp_xy = (1.0 - alpha_y) * f_t0_interp_y0 + alpha_y * f_t0_interp_y1
+
+            # Interpolation bilinéaire sur le plan xy au temps t1
+            f_t1_interp_y0 = (1.0 - alpha_x) * f_t1x0y0 + alpha_x * f_t1x1y0
+            f_t1_interp_y1 = (1.0 - alpha_x) * f_t1x0y1 + alpha_x * f_t1x1y1
+            f_t1_interp_xy = (1.0 - alpha_y) * f_t1_interp_y0 + alpha_y * f_t1_interp_y1
+            
+            # Interpolation linéaire finale en temps
+            interp_results = (1.0 - alpha_t.squeeze(-1)) * f_t0_interp_xy + alpha_t.squeeze(-1) * f_t1_interp_xy
+            return interp_results
+
+        # Interpolation pour la vorticité (w) et la fonction de courant (psi)
+        w_interp = _interpolate_field(w_grid_t0, w_grid_t1)
+        psi_interp = _interpolate_field(psi_grid_t0, psi_grid_t1)
+
+        # Empile les résultats pour obtenir une sortie de dimension 2
+        final_results = torch.stack([psi_interp, w_interp], dim=1)
         
-        return interp_results
+        return final_results.squeeze(0) if is_single_point else final_results
 
     def visualize(self, time_point_idx=-1, time_slices_to_plot=None):
         import matplotlib.pyplot as plt
@@ -267,22 +311,81 @@ class NavierStokesSolver(Solver):
                 plt.legend()
                 plt.grid(True)
                 plt.show()
-            elif self.nT > 0 : # Only close if figure was created
+            elif self.nT > 0 :
                  plt.close()
 
 
-if __name__ == "__main__":
+def navier_stokes_pde(this: PINN, u_pred_arg: Tensor, a_in_arg: Tensor, idx: int | None = None) -> Tensor:
+    """
+    Calcule le résidu de l'équation de Navier-Stokes en 2D pour les points de collocation.
+
+    Cette fonction suppose que le PINN produit deux variables :
+    - u_pred[:, 0] = ψ (fonction de courant)
+    - u_pred[:, 1] = w (vorticité)
+    
+    Et que l'entrée est de la forme a_in = (t, x, y).
+    """
+
+    if idx is None:
+        raise ValueError("L'index 'idx' ne peut pas être None lors du calcul du résidu de la PDE.")
+
+    J_full = this.J()
+    H_full = this.H()
+
+    x_colloc = a_in_arg[:, 1]
+    y_colloc = a_in_arg[:, 2]
+
+    # Extraire les prédictions (ψ, w) pour les points de collocation
+    psi_pred = this.u_pred[idx:, 0]
+    w_pred = this.u_pred[idx:, 1]
+
+    # Dérivées de la fonction de courant ψ (sortie 0)
+    dpsi_dx = J_full[idx:, 0, 1]
+    dpsi_dy = J_full[idx:, 0, 2]
+    d2psi_dx2 = H_full[idx:, 0, 1, 1]
+    d2psi_dy2 = H_full[idx:, 0, 2, 2]
+
+    # Dérivées de la vorticité w (sortie 1)
+    dw_dt = J_full[idx:, 1, 0]
+    dw_dx = J_full[idx:, 1, 1]
+    dw_dy = J_full[idx:, 1, 2]
+    d2w_dx2 = H_full[idx:, 1, 1, 1]
+    d2w_dy2 = H_full[idx:, 1, 2, 2]
+
+    nu = 1e-3
+
+    # Résidu 1 : Équation de Poisson pour la vorticité
+    laplacian_psi = d2psi_dx2 + d2psi_dy2
+    residual_poisson = w_pred - laplacian_psi
+
+    # Résidu 2 : Équation de transport de la vorticité
+    f_forcing = 0.1 * (torch.sin(4 * torch.pi * x_colloc) + torch.cos(4 * torch.pi * y_colloc))
+    u_velocity = dpsi_dy
+    v_velocity = -dpsi_dx
+    advection_term = u_velocity * dw_dx + v_velocity * dw_dy
+    diffusion_term = nu * (d2w_dx2 + d2w_dy2)
+    residual_transport = dw_dt + advection_term - diffusion_term - f_forcing
+
+    residuals = torch.stack([residual_poisson, residual_transport], dim=1)
+
+    return residuals
+
+
+def main():
+    import os
     import pickle
 
     nT_sim = 1000 
-    nX_sim = 512
-    nY_sim = 512
+    nX_sim = 128
+    nY_sim = 128
     nu_sim = 1e-3
     T_final_sim = 2.0 
 
-    solver_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    solver = NavierStokesSolver(nT=nT_sim, nX=nX_sim, nY=nY_sim, nu=nu_sim, T_final=T_final_sim, device=solver_device)
-    
+    solver = NavierStokesSolver(nT=nT_sim, nX=nX_sim, nY=nY_sim, nu=nu_sim, T_final=T_final_sim)    
     solver.solve()
-    pickle.dump(solver, open("navier_stokes_solver.pkl", "wb"))
-    print("Solver completed and saved to 'navier_stokes_solver.pkl'.")
+
+    outpath = os.path.join(os.path.dirname(__file__), "navier_stokes_solver.pkl")
+    os.makedirs(os.path.dirname(outpath), exist_ok=True)
+    with open(outpath, "wb") as f:
+        pickle.dump(solver, f)
+    print(f"Solver completed and saved to '{outpath}'.")

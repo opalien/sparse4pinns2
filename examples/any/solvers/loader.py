@@ -3,6 +3,7 @@ import torch
 import pickle
 from ..solvers.burger import burger_pde
 from ..solvers.schrodinger import schrodinger_pde
+from ..solvers.navier_stokes import navier_stokes_pde
 
 from ..solvers.solver import Solver
 
@@ -21,6 +22,14 @@ def load_problem(equation: str):
             bounds = [(0, torch.pi/2.), (-5., 5.)]
             output_dim = 2
             input_dim = 2  # (t, x)
+
+        case "navier_stokes":
+            picklefile = "examples/any/solvers/navier_stokes_solver.pkl"
+            pde_func = navier_stokes_pde
+            bounds = [(0, 2.0), (0, 1), (0, 1)]
+            output_dim = 2
+            input_dim = 3  # (t, x, y)
+
 
         case _:
             raise ValueError(f"Unknown equation: {equation}")
