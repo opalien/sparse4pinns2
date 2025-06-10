@@ -14,10 +14,8 @@ TYPE = tuple[Literal[0], dirichlet_type] | tuple[Literal[1], periodic_type] | tu
 PINNDataloader = torch.utils.data.DataLoader[TYPE]
 
 class PINNDataset(torch.utils.data.Dataset[TYPE]):
-    def __init__(self, device: torch.device):
+    def __init__(self):
         super().__init__()
-
-        self.device = device
 
         # Bounds conditions
         # u(dirichlet[:][0]) = dirichlet[:][1]
@@ -103,19 +101,27 @@ def collate_fn(batch: list[TYPE]) -> tuple[ dirichlet_type, periodic_type, collo
     batch_list: tuple[list[dirichlet_type], list[periodic_type], list[colloc_type]] = ([], [], [])
 
     for item in batch:
-        batch_list[item[0]].append(item) # type: ignore
+        batch_list[item[0]].append(item[1]) # type: ignore
 
-    dirichlet: dirichlet_type = (
-        torch.stack([a for (a, _) in batch_list[0]]),
-        torch.stack([u for (_, u) in batch_list[0]])
-    )
+    #print(f"{batch_list[:10]=}")
 
-    periodic: periodic_type = (
-        (torch.stack([a_1 for (a_1, _) in batch_list[1]]),
-         torch.stack([a_2 for (_, a_2) in batch_list[1]]))
-    )
+    dirichlet: dirichlet_type = (torch.tensor([]), torch.tensor([]))
+    if len(batch_list[0]) > 0:
+        dirichlet: dirichlet_type = (
+            torch.stack([a for (a, _) in batch_list[0]]),
+            torch.stack([u for (_, u) in batch_list[0]])
+        )
 
-    colloc: colloc_type = torch.stack(batch_list[2])
+    periodic: periodic_type = (torch.tensor([]), torch.tensor([]))
+    if len(batch_list[1]) > 0:
+        periodic: periodic_type = (
+            (torch.stack([a_1 for (a_1, _) in batch_list[1]]),
+            torch.stack([a_2 for (_, a_2) in batch_list[1]]))
+        )
+
+    colloc: colloc_type = torch.tensor([])
+    if len(batch_list[2]) > 0:
+        colloc: colloc_type = torch.stack(batch_list[2])
 
     return dirichlet, periodic, colloc
 

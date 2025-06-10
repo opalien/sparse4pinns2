@@ -123,11 +123,12 @@ def train(model: PINN,
             test_losses.append(test_loss)
 
         if verbose:
-            print(f"Time: {times[-1]:.4f}s"f"Epoch {epoch + 1}/{epochs} - "
+            print(f"Epoch {epoch + 1}/{epochs} - "
+                  f"Time: {times[-1]:.4f}s - "
                   f"Train Loss: {loss:.4f} - "
-                  f"Train Dirichlet Loss: {dirichlet_loss:.4f} - "
-                  f"Train Periodic Loss: {periodic_loss:.4f} - "
-                  f"Train PDE Loss: {pde_loss:.4f} - ",
+                  f"Dirichlet Loss: {dirichlet_loss:.4f} - "
+                  f"Periodic Loss: {periodic_loss:.4f} - "
+                  f"PDE Loss: {pde_loss:.4f} - ",
                   end="")
             if test_loss is not None:
                 print(f"Test Loss: {test_loss:.4f} - ")

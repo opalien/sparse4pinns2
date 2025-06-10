@@ -36,10 +36,10 @@ class PINN(nn.Module):
         self.J_v = None
         self.H_v = None
 
-        self.dirichlet_loss_v = None
-        self.periodic_loss_v = None
-        self.pde_loss_v = None
-        self.loss_v = None
+        #self.dirichlet_loss_v = None
+        #self.periodic_loss_v = None
+        #self.pde_loss_v = None
+        #self.loss_v = None
 
 
     # a : (batch_size, input_dim)""
@@ -47,7 +47,6 @@ class PINN(nn.Module):
     def forward(self, a: Tensor) -> Tensor:  
         self.reinitialize()      
 
-        a = a.clone().requires_grad_(True)
         for layer in self.layers[:-1]:
             a = self.activation(layer(a))
         u = self.layers[-1](a)
@@ -74,22 +73,28 @@ class PINN(nn.Module):
     def periodic_loss(self, periodic: tuple[Tensor, Tensor]) -> Tensor:
         a_1, a_2 = periodic
         if a_1.size(0) == 0 or a_2.size(0) == 0:
-            return torch.tensor(0.0, device=a_1.device, dtype=a_1.dtype)
-        
+            periodic_loss = torch.tensor(0.0, device=a_1.device, dtype=a_1.dtype)
+            self.periodic_loss_v = periodic_loss
+            return periodic_loss
+
         u_pred_1 = self.forward(a_1)
         u_pred_2 = self.forward(a_2)
 
         periodic_loss = torch.nn.functional.mse_loss(u_pred_1, u_pred_2)
         self.periodic_loss_v = periodic_loss
+
         return periodic_loss
 
 
     def colloc_loss(self, colloc: Tensor) -> Tensor:
         if colloc.size(0) == 0:
-            return torch.tensor(0.0, device=colloc.device, dtype=colloc.dtype)
-        
-        u_pred = self.forward(colloc)
-        pde_pred = self.pde(colloc, u_pred)
+            colloc_loss = torch.tensor(0.0, device=colloc.device, dtype=colloc.dtype)
+            self.colloc_loss_v = colloc_loss
+            return colloc_loss
+
+        a_in = colloc.clone().requires_grad_(True)
+        u_pred = self.forward(a_in)
+        pde_pred = self.pde(a_in, u_pred)
 
         pde_loss_v = torch.nn.functional.mse_loss(pde_pred, torch.zeros_like(pde_pred))
         self.pde_loss_v = pde_loss_v
