@@ -347,43 +347,64 @@ class SchrodingerSolver(Solver):
 
 
 
+def schrodinger_pde(this: PINN, a: Tensor, u: Tensor) -> Tensor:
+    J = this.J(a, u)
+    H = this.H(a, u)
 
-def schrodinger_pde(this: PINN, u_pred_arg: Tensor, a_in_arg: Tensor, idx: int | None = None) -> Tensor:
+    u_real = u[:, 0]
+    v_imag = u[:, 1]
 
-    if idx is None:
-        raise ValueError("idx cannot be None when schrodinger_pde is called for computation.")
+    u_real_t = J[:, 0, 0]
+    v_imag_t = J[:, 1, 0]
 
-    J_full = this.J() 
-    H_full = this.H() 
+    u_real_xx = H[:, 0, 1, 1]
+    v_imag_xx = H[:, 1, 1, 1]
 
+    h_mod_sq = u_real**2 + v_imag**2
 
-    u_val_colloc = this.u_pred[idx:, 0]
-    v_val_colloc = this.u_pred[idx:, 1]
-
-
-    u_t_colloc = J_full[idx:, 0, 0]   
-    u_xx_colloc = H_full[idx:, 0, 1, 1] 
-
-    v_t_colloc = J_full[idx:, 1, 0]   
-    v_xx_colloc = H_full[idx:, 1, 1, 1] 
-
-    h_mod_sq_colloc = u_val_colloc**2 + v_val_colloc**2
-
-    # Imaginary part of PDE: u_t + 0.5*v_xx + |h|^2*v = 0
-    pde_imag_residual = u_t_colloc + 0.5 * v_xx_colloc + h_mod_sq_colloc * v_val_colloc
-    
-    # Real part of PDE: v_t - 0.5*u_xx - |h|^2*u = 0
-    pde_real_residual = v_t_colloc - 0.5 * u_xx_colloc - h_mod_sq_colloc * u_val_colloc
+    pde_imag_residual = u_real_t + 0.5 * v_imag_xx + h_mod_sq * v_imag
+    pde_real_residual = v_imag_t - 0.5 * u_real_xx - h_mod_sq * u_real
 
     residuals = torch.stack([pde_imag_residual, pde_real_residual], dim=1)
     
     return residuals
 
-def main():
+
+def schrodinger_dirichlet_generator() -> tuple[Tensor, Tensor]:
+    t_coord = torch.tensor([0.0])
+    x_coord = torch.empty(1).uniform_(-5, 5)
+    
+    a = torch.cat([t_coord, x_coord])
+
+    u_real = 2.0 / torch.cosh(x_coord)
+    u_imag = torch.tensor([0.0])
+    
+    u = torch.cat([u_real, u_imag])
+        
+    return a, u
+
+def schrodinger_periodic_generator() -> tuple[torch.Tensor, torch.Tensor]:
+    t = torch.empty(1).uniform_(0, torch.pi / 2).item()
+    a1 = torch.tensor([t, -5.0])
+    a2 = torch.tensor([t, 5.0])
+    return a1, a2
+
+
+def schrodinger_colloc_generator() -> Tensor:
+    t_coord = torch.empty(1).uniform_(0, torch.pi / 2)
+    x_coord = torch.empty(1).uniform_(-5, 5)
+    
+    a = torch.cat([t_coord, x_coord])
+    return a
+
+
+
+
+def main(nT=1000, nX=500):
     import pickle
     import os
 
-    solver = SchrodingerSolver(nT=1000, nX=500)
+    solver = SchrodingerSolver(nT=nT, nX=nX)
     solver.solve(newton_iters=5, newton_tol=1e-6) 
 
     outpath = os.path.join(os.path.dirname(__file__), "schrodinger_solver.pkl")
