@@ -22,9 +22,12 @@ from experiments.tree.execution_tree import ExecutionTree
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 match os.cpu_count():
     case None:  torch.set_num_threads(1)
     case n:     torch.set_num_threads(n)
+
+
 
 
 parser = argparse.ArgumentParser(description="PDE solving.")

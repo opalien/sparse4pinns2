@@ -1,1 +1,1 @@
-sbatch experiments/tree/run.sh experiments/tree 0
+sbatch experiments/tree/run.sh experiments/tree/ 0
