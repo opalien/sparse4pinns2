@@ -10,7 +10,6 @@ import os
 import pickle
 
 
-
 class BurgerSolver(Solver):
 
     def __init__(self, nT: int = 100, nX: int = 100):
@@ -227,23 +226,50 @@ class BurgerSolver(Solver):
 
 
 
-def burger_pde(this: PINN, u_pred: Tensor, a_in: Tensor, idx: int | None = None) -> Tensor:
-    
-    J = this.J()
-    H = this.H()
+def burger_pde(this: PINN, a: Tensor, u: Tensor) -> Tensor:
 
-    #print(f"{J.shape=}, {H.shape=}")
-    #print(f"{J[:5]=}, {H[:5]=}")
+    J = this.J(a, u)
+    H = this.H(a, u)
 
-    du_dt = J[idx:, 0, 0]
-    du_dx = J[idx:, 0, 1]
-    du_dxx = H[idx:, 0, 1, 1]
-    u = this.u_pred[idx:, 0]
+    du_dt = J[:, 0, 0]
+    du_dx = J[:, 0, 1]
+    du_dxx = H[:, 0, 1, 1]
+    u_ = u[:, 0]
 
-
-    return du_dt + u*du_dx - (0.01/torch.pi)*du_dxx
+    return du_dt + u_*du_dx - du_dxx*(0.01 / torch.pi)
 
 
+def burger_dirichlet_generator() -> tuple[Tensor, Tensor]:
+    a, u = None, None
+    match torch.randint(0, 3, (1,)).item():
+        case 0:
+            a = torch.zeros(2)
+            a[1] = torch.empty(1).uniform_(-1, 1)
+            u = -torch.sin(torch.pi * a[1]).unsqueeze(0)
+
+        case 1:
+            a = torch.zeros(2)
+            a[0] = torch.empty(1).uniform_(0, 1)
+            a[1] = -1
+            u = torch.zeros(1)
+        
+        case 2:
+            a = torch.zeros(2)
+            a[0] = torch.empty(1).uniform_(0, 1)
+            a[1] = 1
+            u = torch.zeros(1)
+
+        case _:
+            raise ValueError("Unexpected case in dirichlet_generator")
+        
+    return a, u
+
+
+def burger_colloc_generator() -> Tensor:
+    a = torch.zeros(2)
+    a[0] = torch.empty(1).uniform_(0, 1)
+    a[1] = torch.empty(1).uniform_(-1, 1)
+    return a
 
 
 
