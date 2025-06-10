@@ -54,7 +54,7 @@ if __name__ == "__main__":
     input_directory = "."
     output_file_name = "project" + ".txt"
 
-    exclude = ["node_modules/", ".git/", "build", "test", ".gitignore", ".DS_Store", ".jpg", ".png", ".svg", ".pkl", ".pyc", "converter.py", ".txt", ".lock", ".nix"]
+    exclude = ["node_modules/", ".git/", "build", "test", ".gitignore", ".DS_Store", ".jpg", ".png", ".svg", ".pkl", ".pyc", "converter.py", ".txt", ".lock", ".nix", "todelete.py", ".json"]
 
     total_files, copied_files = write_directory_structure_to_file(input_directory, output_file_name, exclude)
 
