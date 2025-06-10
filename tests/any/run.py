@@ -4,11 +4,17 @@ from torch import nn
 import os
 import argparse
 
+
+
 from examples.any.solvers.loader import load_problem
 from examples.any.model import AnyPINN
 from examples.any.dataset import AnyDataset
 
 from core.utils.train import train
+from core.utils.seed import set_seed
+
+
+
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -22,13 +28,16 @@ parser.add_argument("problem", help="The pde to solve")
 parser.add_argument("-m", "--m_matrix", type=int, default=2, help="coté de la matrice (défaut: 1)")
 parser.add_argument("-k", "--k_layers", type=int, default=1, help="Un nombre (défaut: 1)")
 parser.add_argument("-e", "--epoch", type=int, default=10, help="Un nombre (défaut: 100)")
+parser.add_argument("-s", "--seed", type=int, default=42, help="Un nombre (défaut: 42)")
 #args = parser.parse_args()
-
+set_seed(42) #args.seed
 n = 16 #args.m_matrix**2
 k = 5 # args.k_layers
-epoch = 10 #args.epoch
+epoch = 1000 #args.epoch
 lr = 0.001
-problem = "burger" #args.problem
+problem = "navier_stokes"#"schrodinger"#"burger" #args.problem
+
+
 
 
 if __name__ == "__main__":
