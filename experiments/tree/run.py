@@ -52,7 +52,7 @@ language = lambda x: x in [element[:len(x)] for element in list_language] if lis
 
 
 lettres = string.ascii_letters
-alea = str(args.seed) #'monoid_'.join(random.choice(lettres) for _ in range(10))
+alea = f"{problem}_{args.seed}" #'monoid_'.join(random.choice(lettres) for _ in range(10))
 print(f"Séquence aléatoire générée: {alea}")
 save_path = os.path.join("results", "tree", f'results_{problem}_{alea}.json')
 
