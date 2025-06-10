@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --array=0-300%5
+#SBATCH --array=1-300%5
 #SBATCH --job-name=sparse4pinn
 #SBATCH --nodes=1                # nombre de noeuds
 #SBATCH --ntasks=1               # nombre total de tâches sur tous les nœuds

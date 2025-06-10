@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch import Tensor
+import copy
 
 from collections.abc import Iterable
 
@@ -184,3 +185,20 @@ class PINN(nn.Module):
         if self.periodic_loss_v is None:
             raise ValueError("Call loss before calling get_periodic_loss")
         return self.periodic_loss_v
+
+
+    def __deepcopy__(self, memo):
+        if id(self) in memo:
+            return memo[id(self)]
+        
+        cls = self.__class__
+        new_pinn = cls.__new__(cls)
+        memo[id(self)] = new_pinn
+        
+        for k, v in self.__dict__.items():
+            if k in ['J_v', 'H_v', 'dirichlet_loss_v', 'periodic_loss_v', 'pde_loss_v', 'loss_v']:
+                setattr(new_pinn, k, None)
+            else:
+                setattr(new_pinn, k, copy.deepcopy(v, memo))
+
+        return new_pinn
