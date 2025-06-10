@@ -3,15 +3,19 @@ from torch import nn
 
 import os
 import argparse
+import random
+import string
+import json
 
+
+from core.utils.seed import set_seed
 
 
 from examples.any.solvers.loader import load_problem
 from examples.any.model import AnyPINN
 from examples.any.dataset import AnyDataset
 
-from core.utils.train import train, train_lbfgs
-from core.utils.seed import set_seed
+from experiments.tree.execution_tree import ExecutionTree
 
 
 
@@ -27,27 +31,33 @@ parser = argparse.ArgumentParser(description="PDE solving.")
 parser.add_argument("problem", help="The pde to solve")
 parser.add_argument("-m", "--m_matrix", type=int, default=2, help="coté de la matrice (défaut: 1)")
 parser.add_argument("-k", "--k_layers", type=int, default=1, help="Un nombre (défaut: 1)")
-parser.add_argument("-e", "--epoch", type=int, default=10, help="Un nombre (défaut: 100)")
+parser.add_argument("-l", "--language", type=str, default="", help="path to the language o the learning")
 parser.add_argument("-s", "--seed", type=int, default=42, help="Un nombre (défaut: 42)")
-#args = parser.parse_args()
-set_seed(42) #args.seed
-n = 16 #args.m_matrix**2
-k = 5 # args.k_layers
-epoch = 10 #args.epoch
+parser.add_argument("-f", "--factor", type=int, default=1000, help="Un nombre (défaut: 1000)")
+args = parser.parse_args()
+
+set_seed(args.seed)
+
+n = args.m_matrix**2
+k = args.k_layers
 lr = 0.001
-problem = "navier_stokes"#"schrodinger"#"burger" #args.problem
+problem = args.problem
+f = args.factor
+
+list_language = json.load(open(args.language, "r"))["bests"] if args.language else []
+language = lambda x: x in [element[:len(x)] for element in list_language] if list_language else lambda x: True
 
 
+lettres = string.ascii_letters
+alea = str(args.seed) #'monoid_'.join(random.choice(lettres) for _ in range(10))
+print(f"Séquence aléatoire générée: {alea}")
+save_path = os.path.join("results", "tree", f'results_{problem}_{alea}.json')
 
 
 if __name__ == "__main__":
-    f = 1000
-
-
     solver, pde_func, dirichlet_generator, periodic_generator, collocation_generator, input_dim, output_dim, n_dirichlet, n_periodic, n_colloc = load_problem(problem)
 
     n_dirichlet, n_periodic, n_colloc = n_dirichlet * f, n_periodic * f, n_colloc * f
-
 
     train_dataset = AnyDataset(
         dirichlet_generator=dirichlet_generator,
@@ -70,7 +80,6 @@ if __name__ == "__main__":
     train_dataloader  = train_dataset.get_dataloader(100)
     test_dataloader = test_dataset.get_dataloader(100)   
 
-
     layers = [
         nn.Linear(input_dim, n),
         *[nn.Linear(n, n) for _ in range(k)],
@@ -82,29 +91,15 @@ if __name__ == "__main__":
         pde=pde_func,
     )
 
-
-
-#    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-#    results = train(
-#        model=model,
-#        train_loader=train_dataloader,
-#        optimizer=optimizer,
-#        epochs=epoch,
-#        device=device,
-#        test_loader=test_dataloader,
-#        verbose=True
-#    )
-
-    optimizer = torch.optim.LBFGS(model.parameters(), lr=lr, max_iter=20, max_eval=20, tolerance_grad=1e-7, tolerance_change=1e-9)
-    results_lbfgs = train_lbfgs(
-        model=model,
-        train_loader=train_dataloader,
-        optimizer=optimizer,
+    tree = ExecutionTree(
+        pinn=model,
+        train_dataloader=train_dataloader,
+        test_dataloader=test_dataloader,
         device=device,
-        epochs=1000,
-        test_loader=test_dataloader,
-        verbose=True
+        work_dir=os.path.join("results", "tree"),
+        steps=[i*500 for i in range(4+1)],
+        alea=alea,
+        language=language
     )
-    
 
-
+    tree.run()

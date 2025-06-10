@@ -19,3 +19,4 @@ experiments/any/params
 *.tiff
 *.ico
 *.webp
+*todelete.py
