@@ -44,7 +44,7 @@ lr = 0.001
 problem = args.problem
 f = args.factor
 
-list_language = json.load(open(args.language, "r"))["bests"] if args.language else []
+list_language: list[list[str]] = json.load(open(args.language, "r"))["bests"] if args.language else []
 language = lambda x: x in [element[:len(x)] for element in list_language] if list_language else lambda x: True
 
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         dirichlet_generator=dirichlet_generator,
         periodic_generator=periodic_generator,
         colloc_generator=collocation_generator,
-        n_dirichlet=1000,
+        n_dirichlet=f,
         n_periodic=0,
         n_colloc=0 
     )
