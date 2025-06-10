@@ -5,7 +5,7 @@ from ..solvers.solver import Solver
 
 from ..solvers.burger import burger_pde, burger_dirichlet_generator, burger_colloc_generator
 from ..solvers.schrodinger import schrodinger_pde, schrodinger_dirichlet_generator,schrodinger_periodic_generator, schrodinger_colloc_generator
-
+from ..solvers.navier_stokes import navier_stokes_pde, navier_stokes_dirichlet_generator, navier_stokes_periodic_generator, navier_stokes_colloc_generator
 
 
 
@@ -17,12 +17,14 @@ def load_problem(equation: str):
             dirichlet_generator = burger_dirichlet_generator
             periodic_generator = lambda: (torch.zeros(2), torch.zeros(2))  # No periodic conditions for Burger's equation
             collocation_generator = burger_colloc_generator
+            
             input_dim = 2  # (t, x)
             output_dim = 1
 
             n_dirichlet = 1
             n_periodic = 0
             n_colloc = 10
+
 
         case "schrodinger":
             picklefile = "examples/any/solvers/schrodinger_solver.pkl"
@@ -37,6 +39,22 @@ def load_problem(equation: str):
             n_dirichlet = 1
             n_periodic = 1
             n_colloc = 10
+
+
+        case "navier_stokes":
+            picklefile = "examples/any/solvers/navier_stokes_solver.pkl"
+            pde_func = navier_stokes_pde
+            dirichlet_generator = navier_stokes_dirichlet_generator
+            periodic_generator = navier_stokes_periodic_generator
+            collocation_generator = navier_stokes_colloc_generator
+            
+            input_dim = 3
+            output_dim = 2
+
+            n_dirichlet = 1
+            n_periodic = 1
+            n_colloc = 10
+
 
         case _:
             raise ValueError(f"Unknown equation: {equation}")

@@ -315,50 +315,30 @@ class NavierStokesSolver(Solver):
                  plt.close()
 
 
-def navier_stokes_pde(this: PINN, u_pred_arg: Tensor, a_in_arg: Tensor, idx: int | None = None) -> Tensor:
-    """
-    Calcule le résidu de l'équation de Navier-Stokes en 2D pour les points de collocation.
-
-    Cette fonction suppose que le PINN produit deux variables :
-    - u_pred[:, 0] = ψ (fonction de courant)
-    - u_pred[:, 1] = w (vorticité)
+def navier_stokes_pde(this: PINN, a: Tensor, u: Tensor) -> Tensor:
+    w_pred = u[:, 1]
     
-    Et que l'entrée est de la forme a_in = (t, x, y).
-    """
+    J = this.J(a, u)
+    H = this.H(a, u)
 
-    if idx is None:
-        raise ValueError("L'index 'idx' ne peut pas être None lors du calcul du résidu de la PDE.")
+    dpsi_dx = J[:, 0, 1]
+    dpsi_dy = J[:, 0, 2]
+    d2psi_dx2 = H[:, 0, 1, 1]
+    d2psi_dy2 = H[:, 0, 2, 2]
 
-    J_full = this.J()
-    H_full = this.H()
-
-    x_colloc = a_in_arg[:, 1]
-    y_colloc = a_in_arg[:, 2]
-
-    # Extraire les prédictions (ψ, w) pour les points de collocation
-    psi_pred = this.u_pred[idx:, 0]
-    w_pred = this.u_pred[idx:, 1]
-
-    # Dérivées de la fonction de courant ψ (sortie 0)
-    dpsi_dx = J_full[idx:, 0, 1]
-    dpsi_dy = J_full[idx:, 0, 2]
-    d2psi_dx2 = H_full[idx:, 0, 1, 1]
-    d2psi_dy2 = H_full[idx:, 0, 2, 2]
-
-    # Dérivées de la vorticité w (sortie 1)
-    dw_dt = J_full[idx:, 1, 0]
-    dw_dx = J_full[idx:, 1, 1]
-    dw_dy = J_full[idx:, 1, 2]
-    d2w_dx2 = H_full[idx:, 1, 1, 1]
-    d2w_dy2 = H_full[idx:, 1, 2, 2]
+    dw_dt = J[:, 1, 0]
+    dw_dx = J[:, 1, 1]
+    dw_dy = J[:, 1, 2]
+    d2w_dx2 = H[:, 1, 1, 1]
+    d2w_dy2 = H[:, 1, 2, 2]
 
     nu = 1e-3
+    x_colloc = a[:, 1]
+    y_colloc = a[:, 2]
 
-    # Résidu 1 : Équation de Poisson pour la vorticité
     laplacian_psi = d2psi_dx2 + d2psi_dy2
-    residual_poisson = w_pred - laplacian_psi
+    residual_poisson = w_pred + laplacian_psi
 
-    # Résidu 2 : Équation de transport de la vorticité
     f_forcing = 0.1 * (torch.sin(4 * torch.pi * x_colloc) + torch.cos(4 * torch.pi * y_colloc))
     u_velocity = dpsi_dy
     v_velocity = -dpsi_dx
@@ -367,8 +347,47 @@ def navier_stokes_pde(this: PINN, u_pred_arg: Tensor, a_in_arg: Tensor, idx: int
     residual_transport = dw_dt + advection_term - diffusion_term - f_forcing
 
     residuals = torch.stack([residual_poisson, residual_transport], dim=1)
-
     return residuals
+
+
+def navier_stokes_dirichlet_generator() -> tuple[Tensor, Tensor]:
+    t = torch.tensor([0.0])
+    x = torch.empty(1).uniform_(0, 1)
+    y = torch.empty(1).uniform_(0, 1)
+    
+    a = torch.cat([t, x, y])
+
+    w_val = _default_w0_initial_fn(x, y)
+    psi_val = torch.tensor([0.0]) 
+
+    u = torch.cat([psi_val, w_val])
+    return a, u
+
+
+def navier_stokes_periodic_generator() -> tuple[Tensor, Tensor]:
+    T_final = 2.0
+    t = torch.empty(1).uniform_(0, T_final)
+
+    if torch.rand(1).item() > 0.5:
+        y = torch.empty(1).uniform_(0, 1)
+        a1 = torch.cat([t, torch.tensor([0.0]), y])
+        a2 = torch.cat([t, torch.tensor([1.0]), y])
+    else:
+        x = torch.empty(1).uniform_(0, 1)
+        a1 = torch.cat([t, x, torch.tensor([0.0])])
+        a2 = torch.cat([t, x, torch.tensor([1.0])])
+    
+    return a1, a2
+
+
+def navier_stokes_colloc_generator() -> Tensor:
+    T_final = 2.0
+    t = torch.empty(1).uniform_(0, T_final)
+    x = torch.empty(1).uniform_(0, 1)
+    y = torch.empty(1).uniform_(0, 1)
+    
+    a = torch.cat([t, x, y])
+    return a
 
 
 def main():
