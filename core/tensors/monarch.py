@@ -7,10 +7,13 @@ from torch import Tensor, nn
 import torch
 import copy
 
-from ..utils.butterfly import blockdiag_butterfly_project
+from ..utils.butterfly import blockdiag_butterfly_project, BlockdiagButterflyMultiply
 
 
 from  einops import rearrange, einsum # type: ignore
+
+
+_fast_path_warning_shown: bool = False
 
 
 class MonarchTensor(TensorLike):
@@ -84,11 +87,72 @@ class MonarchTensor(TensorLike):
             case Tensor():
                 if other.shape[0] != monarch.n:
                     raise ValueError(f"Dimension mismatch: MonarchTensor matmul requires Tensor dim {monarch.n}, but got {other.shape[-1]}")
-                
-                return monarch.P2 @ (monarch.L @ (monarch.P1 @ (monarch.R @ other)))
-            
+
+                #use_fast_path = (
+                #    other.is_cuda and
+                #    other.dtype in [torch.float32, torch.float16]
+                #)
+
+                if True:#use_fast_path:
+                    try:
+                        global _fast_path_warning_shown
+                        x = other
+
+                        input_was_1d = (x.ndim == 1)
+                        if input_was_1d:
+                            x = x.unsqueeze(0)
+
+                        if hasattr(monarch.R, 'block_diag'):
+                            R_tensor = monarch.R.block_diag
+                        else:
+                            R_tensor = monarch.R
+
+                        if hasattr(monarch.L, 'block_diag'):
+                            L_tensor = monarch.L.block_diag
+                        else:
+                            L_tensor = monarch.L
+
+                        x_t = x.transpose(0, 1)
+
+                        output_t = BlockdiagButterflyMultiply.apply(x_t, R_tensor, L_tensor)
+                        
+                        output = output_t.transpose(0, 1)
+
+                        if input_was_1d:
+                            output = output.squeeze(0)
+                        
+                        return output
+
+
+                    except Exception as e:
+                        if not _fast_path_warning_shown:
+                            _fast_path_warning_shown = True
+                                
+                            print(f"Fast Monarch multiply failed with error: {e}. "
+                                        f"Falling back to the slow implementation.")
+                        pass
+
+                return monarch.P2.to(other.device) @ (monarch.L.to(other.device) @ (monarch.P1.to(other.device) @ (monarch.R.to(other.device) @ other)))
+
             case _:
                 return NotImplemented
+
+
+#    @staticmethod
+#    def _matmul(monarch: MonarchTensor | nn.Module, other: Tensor | TensorLike) -> Tensor | NotImplementedError:
+#        match other:
+#            case TensorLike():
+#                return MonarchTensor._matmul(monarch, other.dense)
+#            
+#            case Tensor():
+#                if other.shape[0] != monarch.n:
+#                    raise ValueError(f"Dimension mismatch: MonarchTensor matmul requires Tensor dim {monarch.n}, but got {other.shape[-1]}")
+#                
+#
+#                return monarch.P2 @ (monarch.L @ (monarch.P1 @ (monarch.R @ other)))
+#            
+#            case _:
+#                return NotImplemented
 
 
     @staticmethod
