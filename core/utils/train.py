@@ -11,12 +11,13 @@ import time
 def to_batch(dirichlet: dirichlet_type, 
              periodic: periodic_type, 
              colloc: colloc_type, 
-             
+
              device: torch.device):
     
     dirichlet = (dirichlet[0].to(device), dirichlet[1].to(device))
     periodic = (periodic[0].to(device), periodic[1].to(device))
     colloc = colloc.to(device)
+
     return dirichlet, periodic, colloc
 
 
@@ -30,7 +31,7 @@ def accuracy(model: PINN, test_loader: PINNDataloader, device: torch.device) -> 
         for _, (dirichlet, periodic, colloc) in enumerate(test_loader):
             dirichlet, periodic, colloc = to_batch(dirichlet, periodic, colloc, device)
 
-            loss = model.loss(dirichlet, periodic, colloc)
+            loss = model.dirichlet_loss(dirichlet)
 
             total_MSE += loss.item() * dirichlet[0].size(0)
 
@@ -110,29 +111,34 @@ def train(model: PINN,
 
     for epoch in range(epochs):
         t0 = time.time()
-        loss, dirichlet_loss, periodic_loss, pde_loss = train_one_epoch(model, train_loader, optimizer, device)
-        times.append(time.time() - t0)
 
-        train_losses.append(loss)
-        train_dirichlet_losses.append(dirichlet_loss)
-        train_periodic_losses.append(periodic_loss)
-        train_pde_losses.append(pde_loss)
+        try:
+            loss, dirichlet_loss, periodic_loss, pde_loss = train_one_epoch(model, train_loader, optimizer, device)
+            times.append(time.time() - t0)
 
-        if test_loader is not None:
-            test_loss = accuracy(model, test_loader, device)
-            test_losses.append(test_loss)
+            train_losses.append(loss)
+            train_dirichlet_losses.append(dirichlet_loss)
+            train_periodic_losses.append(periodic_loss)
+            train_pde_losses.append(pde_loss)
 
-        if verbose:
-            print(f"Epoch {epoch + 1}/{epochs} - "
-                  f"Time: {times[-1]:.4f}s - "
-                  f"Train Loss: {loss:.4f} - "
-                  f"Dirichlet Loss: {dirichlet_loss:.4f} - "
-                  f"Periodic Loss: {periodic_loss:.4f} - "
-                  f"PDE Loss: {pde_loss:.4f} - ",
-                  end="")
-            if test_loss is not None:
-                print(f"Test Loss: {test_loss:.4f} - ")
+            if test_loader is not None:
+                test_loss = accuracy(model, test_loader, device)
+                test_losses.append(test_loss)
 
+            if verbose:
+                print(f"Epoch {epoch + 1}/{epochs} - "
+                    f"Time: {times[-1]:.4f}s - "
+                    f"Train Loss: {loss:.4f} - "
+                    f"Dirichlet Loss: {dirichlet_loss:.4f} - "
+                    f"Periodic Loss: {periodic_loss:.4f} - "
+                    f"PDE Loss: {pde_loss:.4f} - ",
+                    end="")
+                if test_loss is not None:
+                    print(f"Test Loss: {test_loss:.4f} - ")
+
+        except ValueError as e:
+            print(f"\nL'époque {epoch + 1}/{epochs} a échoué avec l'erreur : {e}")
+            raise e
 
     return train_losses, train_dirichlet_losses, train_periodic_losses, train_pde_losses, test_losses, times
 
@@ -163,8 +169,6 @@ def train_one_epoch_lbfgs(model: PINN,
     def closure():
         optimizer.zero_grad()
         
-        # Pour une étape L-BFGS, nous accumulons la perte sur tous les batchs du loader.
-        # Cela garantit que la fonction de perte est déterministe, une exigence pour L-BFGS.
         total_loss_for_step = torch.tensor(0.0, device=device)
         
         # Réinitialisation des accumulateurs pour le logging
@@ -180,7 +184,6 @@ def train_one_epoch_lbfgs(model: PINN,
             
             loss = model.loss(dirichlet, periodic, colloc)
 
-            # Vérification de stabilité : arrête l'entraînement si la perte devient invalide.
             if torch.isnan(loss) or torch.isinf(loss):
                  raise ValueError(f"LBFGS: Perte invalide ({loss.item()}) détectée. L'entraînement ne peut pas continuer.")
 
@@ -281,14 +284,6 @@ def train_lbfgs(model: PINN,
         
         except ValueError as e:
             print(f"\nL'époque {epoch + 1}/{epochs} a échoué avec l'erreur : {e}")
-            # Ajoute NaN pour indiquer l'échec et arrête la boucle
-            times.append(time.time() - t0)
-            train_losses.append(float('nan'))
-            train_dirichlet_losses.append(float('nan'))
-            train_periodic_losses.append(float('nan'))
-            train_pde_losses.append(float('nan'))
-            if test_loader is not None and test_losses is not None:
-                test_losses.append(float('nan'))
-            break
-
+            raise e
+        
     return train_losses, train_dirichlet_losses, train_periodic_losses, train_pde_losses, test_losses, times
