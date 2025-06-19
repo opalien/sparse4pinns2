@@ -59,13 +59,13 @@ for k in K:
         n = m**2
         dense_layers = [
             nn.Linear(2, n),
-            *[MonarchLinear(n, n) for _ in range(k)],
+            *[nn.Linear(n, n) for _ in range(k)],
             nn.Linear(n, 1),
         ]  
 
         monarch_layers = [
             nn.Linear(input_dim, n),
-            *[MonarchLinear(n, n) for _ in range(k)],
+            *[nn.Linear(n, n) for _ in range(k)],
             nn.Linear(n, output_dim),
         ]
 
