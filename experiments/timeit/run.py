@@ -47,9 +47,9 @@ save_path = os.path.join("results", "timeit", f'results_{alea}.json')
 solver, pde_func, dirichlet_generator, periodic_generator, collocation_generator, test_generator, input_dim, output_dim, n_dirichlet, n_periodic, n_colloc = load_problem("burger")
 
 
-number= 1000
+number= 100
 K = [i for i in range(1, 60, 3)]
-M = [i for i in range(2, 100, 2)]
+M = [i for i in range(2, 40, 2)]
 
 for k in K:  
     t_dense = []
@@ -70,15 +70,15 @@ for k in K:
         ]
 
 
-        dense_model = AnyPINN(
+        dense_model = torch.compile(AnyPINN(
             layers=dense_layers,
             pde=pde_func,
-        ).to(device)
+        )).to(device)
 
-        monarch_model = AnyPINN(
+        monarch_model = torch.compile(AnyPINN(
             layers=monarch_layers,
             pde=pde_func,
-        ).to(device)
+        )).to(device)
 
         x = torch.randn(100, 2).to(device)
 

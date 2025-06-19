@@ -228,16 +228,16 @@ if __name__ == "__main__":
         save_result(save_path, to_save)
 
 
-#        optimizer = torch.optim.LBFGS(
-#            monarch_model.parameters(),
-#            lr=1.0,
-#            max_iter=10,
-#            max_eval=20,
-#            tolerance_grad=1e-7,
-#            tolerance_change=1e-9,
-#            history_size=150,
-#            line_search_fn="strong_wolfe"
-#        )
+        optimizer = torch.optim.LBFGS(
+            monarch_model.parameters(),
+            lr=1.0,
+            max_iter=10,
+            max_eval=20,
+            tolerance_grad=1e-7,
+            tolerance_change=1e-9,
+            history_size=150,
+            line_search_fn="strong_wolfe"
+        )
 #        train_losses, train_dirichlet_losses, train_periodic_losses, train_pde_losses, test_losses, times = train_lbfgs(
 #            model=monarch_model,
 #            train_loader=train_dataloader,
