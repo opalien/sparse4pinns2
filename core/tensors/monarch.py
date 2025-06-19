@@ -132,7 +132,7 @@ class MonarchTensor(TensorLike):
                                         f"Falling back to the slow implementation.")
                         pass
 
-                return monarch.P2.to(other.device) @ (monarch.L.to(other.device) @ (monarch.P1.to(other.device) @ (monarch.R.to(other.device) @ other)))
+                #return monarch.P2.to(other.device) @ (monarch.L.to(other.device) @ (monarch.P1.to(other.device) @ (monarch.R.to(other.device) @ other)))
                 #return  (monarch.L.to(other.device) @ (monarch.R.to(other.device) @ other))
 
 
@@ -159,6 +159,7 @@ class MonarchTensor(TensorLike):
 
     @staticmethod
     def _rmatmul(other: Tensor | TensorLike, monarch: MonarchTensor | nn.Module) -> Tensor | NotImplementedError:
+        raise NotImplementedError("MonarchTensor does not support right matmul with TensorLike. Use MonarchTensor._rmatmul instead.")
         match other:
             case TensorLike():
                 return MonarchTensor._rmatmul(other.dense, monarch)
