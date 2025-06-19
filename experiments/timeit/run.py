@@ -48,8 +48,8 @@ solver, pde_func, dirichlet_generator, periodic_generator, collocation_generator
 
 
 number= 1000
-K = [i for i in range(1, 60)]
-M = [i for i in range(2, 100)]
+K = [i for i in range(1, 60, 3)]
+M = [i for i in range(2, 100, 2)]
 
 for k in K:  
     t_dense = []
