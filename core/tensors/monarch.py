@@ -133,6 +133,8 @@ class MonarchTensor(TensorLike):
                         pass
 
                 return monarch.P2.to(other.device) @ (monarch.L.to(other.device) @ (monarch.P1.to(other.device) @ (monarch.R.to(other.device) @ other)))
+                #return  (monarch.L.to(other.device) @ (monarch.R.to(other.device) @ other))
+
 
             case _:
                 return NotImplemented
