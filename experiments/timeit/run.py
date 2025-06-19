@@ -38,7 +38,7 @@ match os.cpu_count():
 
 lettres = string.ascii_letters
 alea = ''.join(random.choice(lettres) for _ in range(10))
-print(f"Séquence aléatoire générée: {alea}")
+print(f"Séquence aléatoire générée: {alea}") 
 
 
 save_path = os.path.join("results", "timeit", f'results_{alea}.json')
@@ -47,7 +47,7 @@ save_path = os.path.join("results", "timeit", f'results_{alea}.json')
 solver, pde_func, dirichlet_generator, periodic_generator, collocation_generator, test_generator, input_dim, output_dim, n_dirichlet, n_periodic, n_colloc = load_problem("burger")
 
 
-number= 100
+number= 1000
 K = [i for i in range(1, 60, 3)]
 M = [i for i in range(2, 100, 3)]
 
@@ -59,7 +59,7 @@ for k in K:
         n = m**2
         dense_layers = [
             nn.Linear(2, n),
-            *[nn.Linear(n, n) for _ in range(k)],
+            *[MonarchLinear(n, n) for _ in range(k)],
             nn.Linear(n, 1),
         ]  
 
@@ -70,10 +70,10 @@ for k in K:
         ]
 
 
-        dense_model = torch.compile(AnyPINN(
+        dense_model = AnyPINN(
             layers=dense_layers,
             pde=pde_func,
-        )).to(device)
+        ).to(device)
 
         monarch_model = torch.compile(AnyPINN(
             layers=monarch_layers,
