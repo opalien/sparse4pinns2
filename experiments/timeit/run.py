@@ -30,7 +30,7 @@ from core.layers.monarch import MonarchLinear
 
 
 
-device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+device = torch.device("gpu" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 match os.cpu_count():
     case None:  torch.set_num_threads(1)

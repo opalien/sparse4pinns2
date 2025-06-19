@@ -1,5 +1,5 @@
 
-CMD=$"srun --pty python experiments/timeit/run.py"
+CMD=$"srun --pty --partition=gpu --gres=gpu:1 python experiments/timeit/run.py"
 
 echo "start"
 ml python/3.12
