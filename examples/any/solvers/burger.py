@@ -236,6 +236,9 @@ def burger_pde(this: PINN, a: Tensor, u: Tensor) -> Tensor:
     du_dxx = H[:, 0, 1, 1]
     u_ = u[:, 0]
 
+
+    print(f"{torch.norm(du_dt, p=2)=}, {torch.norm(du_dx, p=2)=}, {torch.norm(du_dxx, p=2)=}, {torch.norm(u_, p=2)=}")
+
     return du_dt + u_*du_dx - du_dxx*(0.01 / torch.pi)
 
 
@@ -272,6 +275,12 @@ def burger_colloc_generator() -> Tensor:
     return a
 
 
+def burger_test_generator(func: Callable[[Tensor], Tensor]) -> tuple[Tensor, Tensor]:
+    a = torch.zeros(2)
+    a[0] = torch.empty(1).uniform_(0, 1)
+    a[1] = torch.empty(1).uniform_(-1, 1)
+    u = func(a)
+    return a, u
 
 
 def main(nT: int = 10_000, nX: int = 1000):

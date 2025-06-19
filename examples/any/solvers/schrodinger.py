@@ -4,6 +4,8 @@ import numpy # For visualization, pi, and other math constants
 import matplotlib.pyplot as plt
 from core.models.pinn import PINN
 
+from typing import Callable
+
 
 from .solver import Solver
 
@@ -397,6 +399,12 @@ def schrodinger_colloc_generator() -> Tensor:
     a = torch.cat([t_coord, x_coord])
     return a
 
+def schrodinger_test_generator(func: Callable[[Tensor], Tensor]) -> tuple[Tensor, Tensor]:
+    a = torch.zeros(2)
+    a[0] = torch.empty(1).uniform_(0, torch.pi / 2)
+    a[1] = torch.empty(1).uniform_(-5, 5)
+    u = func(a)
+    return a, u
 
 
 

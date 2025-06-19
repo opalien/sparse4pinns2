@@ -3,6 +3,7 @@ from torch import Tensor
 import numpy as np
 import abc
 from core.models.pinn import PINN
+from collections.abc import Callable
 
 from ..solvers.solver import Solver
 
@@ -389,14 +390,23 @@ def navier_stokes_colloc_generator() -> Tensor:
     a = torch.cat([t, x, y])
     return a
 
+def navier_stokes_test_generator(func: Callable[[Tensor], Tensor]) -> tuple[Tensor, Tensor]:
+    T_final = 2.0
+    a = torch.zeros(3)
+    a[0] = torch.empty(1).uniform_(0, T_final)
+    a[1] = torch.empty(1).uniform_(0, 1)
+    a[2] = torch.empty(1).uniform_(0, 1)
+    u = func(a)
+    return a, u
+
 
 def main():
     import os
     import pickle
 
     nT_sim = 1000 
-    nX_sim = 128
-    nY_sim = 128
+    nX_sim = 256
+    nY_sim = 256
     nu_sim = 1e-3
     T_final_sim = 2.0 
 

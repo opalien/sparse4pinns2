@@ -1,11 +1,15 @@
 import torch
+from torch import Tensor
+from typing import Callable
 import pickle
+from functools import partial
+
 
 from ..solvers.solver import Solver
 
-from ..solvers.burger import burger_pde, burger_dirichlet_generator, burger_colloc_generator
-from ..solvers.schrodinger import schrodinger_pde, schrodinger_dirichlet_generator,schrodinger_periodic_generator, schrodinger_colloc_generator
-from ..solvers.navier_stokes import navier_stokes_pde, navier_stokes_dirichlet_generator, navier_stokes_periodic_generator, navier_stokes_colloc_generator
+from ..solvers.burger import burger_pde, burger_dirichlet_generator, burger_colloc_generator, burger_test_generator
+from ..solvers.schrodinger import schrodinger_pde, schrodinger_dirichlet_generator,schrodinger_periodic_generator, schrodinger_colloc_generator, schrodinger_test_generator
+from ..solvers.navier_stokes import navier_stokes_pde, navier_stokes_dirichlet_generator, navier_stokes_periodic_generator, navier_stokes_colloc_generator , navier_stokes_test_generator
 
 
 
@@ -17,6 +21,8 @@ def load_problem(equation: str):
             dirichlet_generator = burger_dirichlet_generator
             periodic_generator = lambda: (torch.zeros(2), torch.zeros(2))  # No periodic conditions for Burger's equation
             collocation_generator = burger_colloc_generator
+
+            pre_test_generator: Callable[[Solver], Callable[[], tuple[Tensor, Tensor]]] = lambda solver: partial(burger_test_generator, func=solver.func)
             
             input_dim = 2  # (t, x)
             output_dim = 1
@@ -33,6 +39,8 @@ def load_problem(equation: str):
             periodic_generator = schrodinger_periodic_generator
             collocation_generator = schrodinger_colloc_generator
 
+            pre_test_generator: Callable[[Solver], Callable[[], tuple[Tensor, Tensor]]] = lambda solver: partial(schrodinger_test_generator, func=solver.func)
+
             input_dim = 2  # (t, x)
             output_dim = 2  # (u_real, u_imag)
 
@@ -48,6 +56,8 @@ def load_problem(equation: str):
             periodic_generator = navier_stokes_periodic_generator
             collocation_generator = navier_stokes_colloc_generator
             
+            pre_test_generator: Callable[[Solver], Callable[[], tuple[Tensor, Tensor]]] = lambda solver: partial(navier_stokes_test_generator, func=solver.func)
+
             input_dim = 3
             output_dim = 2
 
@@ -60,5 +70,6 @@ def load_problem(equation: str):
             raise ValueError(f"Unknown equation: {equation}")
         
     solver_pickle: Solver = pickle.load(open(picklefile, "rb"))
+    test_generator = pre_test_generator(solver_pickle)
 
-    return solver_pickle, pde_func, dirichlet_generator, periodic_generator, collocation_generator, input_dim, output_dim, n_dirichlet, n_periodic, n_colloc
+    return solver_pickle, pde_func, dirichlet_generator, periodic_generator, collocation_generator, test_generator, input_dim, output_dim, n_dirichlet, n_periodic, n_colloc

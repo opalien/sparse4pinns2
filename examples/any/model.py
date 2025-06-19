@@ -8,8 +8,9 @@ class AnyPINN(PINN):
     def __init__(self,  layers: Iterable[DLinear],
                         pde: Callable[[PINN, Tensor, Tensor], Tensor],
                         activation: type[nn.Module]=nn.Tanh, 
-                        lmda:float =1.0) -> None:
-        super().__init__(layers, activation, lmda)
+                        alpha:float =1.0,
+                        beta: float= 1.0) -> None:
+        super().__init__(layers, activation, alpha, beta)
 
         self.pde_func = pde
 
