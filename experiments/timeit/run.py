@@ -65,7 +65,7 @@ for k in K:
 
         monarch_layers = [
             nn.Linear(input_dim, n),
-            *[nn.Linear(n, n) for _ in range(k)],
+            *[MonarchLinear(n, n) for _ in range(k)],
             nn.Linear(n, output_dim),
         ]
 
