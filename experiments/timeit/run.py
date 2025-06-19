@@ -49,7 +49,7 @@ solver, pde_func, dirichlet_generator, periodic_generator, collocation_generator
 
 number= 100
 K = [i for i in range(1, 60, 3)]
-M = [i for i in range(2, 40, 2)]
+M = [i for i in range(2, 100, 3)]
 
 for k in K:  
     t_dense = []
