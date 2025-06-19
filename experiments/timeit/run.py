@@ -30,7 +30,7 @@ from core.layers.monarch import MonarchLinear
 
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 match os.cpu_count():
     case None:  torch.set_num_threads(1)
@@ -117,4 +117,4 @@ for k in K:
     plt.ylabel("Time (s)")
     plt.legend()
     plt.grid(True)
-    plt.savefig(f"timeit_k{k}.png")
+    plt.savefig(f"timeit_k={k}_alea={alea}.png")
