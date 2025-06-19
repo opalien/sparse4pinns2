@@ -114,6 +114,10 @@ class MonarchTensor(TensorLike):
 
                         x_t = x.transpose(0, 1)
 
+                        print(f"MonarchTensor fast path: x_t.device={x_t.device}, "
+                              f"R_tensor.device={R_tensor.device}, "
+                              f"L_tensor.device={L_tensor.device}")
+
                         output_t = BlockdiagButterflyMultiply.apply(x_t, R_tensor, L_tensor)
                         
                         output = output_t.transpose(0, 1)
